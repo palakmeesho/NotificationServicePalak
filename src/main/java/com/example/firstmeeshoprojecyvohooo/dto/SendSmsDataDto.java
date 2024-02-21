@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 public class SendSmsDataDto {
     @JsonProperty(value = "requestId")
-    Integer requestId;
+    String requestId;
     @JsonProperty(value = "comments")
     String comments;
 }

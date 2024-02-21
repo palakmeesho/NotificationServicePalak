@@ -25,11 +25,6 @@ public class BlackListService {
     BlackListRepository blackListRepository;
 
     public ResponseEntity<Object> blacklistPhoneNumbers(BlackListRequestDto requestDto) {
-        if(requestDto==null || requestDto.getPhoneNumbers()==null || requestDto.getPhoneNumbers().isEmpty())
-        {
-            ErrorResponseDto errorResponseDto = ErrorResponseDto.builder().message("Invalid Request").build();
-            return new ResponseEntity<>(errorResponseDto, HttpStatus.BAD_REQUEST);
-        }
         try{
             blacklistPhoneNumbersInDb(requestDto);
             blacklistPhoneNumbersInRedis(requestDto);
@@ -47,10 +42,16 @@ public class BlackListService {
     public void blacklistPhoneNumbersInDb(BlackListRequestDto requestDto)
     {
         for(Long phoneNum: requestDto.getPhoneNumbers()) {
-            if (blackListRepository.findAll().stream().noneMatch(blackList -> Objects.equals(blackList.getPhoneNumber(), phoneNum))) {
-                BlackList blackList = BlackList.builder().phoneNumber(phoneNum).statusBlackList(true).build();
-                blackListRepository.save(blackList);
+            List<BlackList> entries = blackListRepository.findAll().stream().filter(blackList1 -> blackList1.getPhoneNumber().equals(phoneNum)).collect(Collectors.toList());
+            BlackList blackList;
+            if (entries.isEmpty()) {
+                blackList = BlackList.builder().phoneNumber(phoneNum).statusBlackList(true).build();
             }
+            else
+            {
+                blackList = BlackList.builder().id(entries.get(0).getId()).statusBlackList(true).phoneNumber(entries.get(0).getPhoneNumber()).build();
+            }
+            blackListRepository.save(blackList);
         }
         log.info("Data saved successfully to database");
     }
@@ -62,11 +63,6 @@ public class BlackListService {
     }
 
     public ResponseEntity<Object> whitelistPhoneNumbers(BlackListRequestDto requestDto) {
-        if(requestDto==null || requestDto.getPhoneNumbers()==null || requestDto.getPhoneNumbers().isEmpty())
-        {
-            ErrorResponseDto errorResponseDto = ErrorResponseDto.builder().message("Invalid Request").build();
-            return new ResponseEntity<>(errorResponseDto, HttpStatus.BAD_REQUEST);
-        }
         try {
             Object object = whitelistPhoneNumbersInDb(requestDto);
             if (object != null) {

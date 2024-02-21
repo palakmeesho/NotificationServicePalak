@@ -1,6 +1,5 @@
 package com.example.firstmeeshoprojecyvohooo.model;
 
-import com.example.firstmeeshoprojecyvohooo.util.Status;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,6 +18,9 @@ public class SmsRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
     private Integer id;
+
+    @Column(name = "request_id")
+    private String requestId;
     @Column(name = "phone_number")
     private Long phoneNumber;
     @Column(name = "message")

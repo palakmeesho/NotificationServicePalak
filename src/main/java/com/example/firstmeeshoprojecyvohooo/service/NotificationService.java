@@ -3,8 +3,11 @@ package com.example.firstmeeshoprojecyvohooo.service;
 import com.example.firstmeeshoprojecyvohooo.dao.BlackListRepository;
 import com.example.firstmeeshoprojecyvohooo.dao.NotificationRepository;
 import com.example.firstmeeshoprojecyvohooo.dto.*;
+import com.example.firstmeeshoprojecyvohooo.exception.ResourceNotFoundException;
 import com.example.firstmeeshoprojecyvohooo.model.BlackList;
 import com.example.firstmeeshoprojecyvohooo.model.SmsRequest;
+import com.example.firstmeeshoprojecyvohooo.util.CommonUtilities;
+import com.example.firstmeeshoprojecyvohooo.util.ExternalService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
@@ -23,94 +26,74 @@ public class NotificationService {
     @Autowired
     private BlackListRepository blackListRepository;
 
-    public ResponseEntity<Object> sendSms(SendSmsRequest sendSmsRequest) {
-        if(sendSmsRequest.getPhoneNumber()==null)
-        {
-            NotificationErrorDto notificationErrorDto = NotificationErrorDto.builder().code("Invalid Request").message("Phone number is mandatory").build();
-            NotificationErrorResponseDto notificationErrorResponseDto = NotificationErrorResponseDto.builder().notificationErrorDto(notificationErrorDto).build();
-            return new ResponseEntity<>(notificationErrorResponseDto, HttpStatus.BAD_REQUEST);
-        }
-        SmsRequest smsRequest = SmsRequest.builder().phoneNumber(sendSmsRequest.getPhoneNumber()).message(sendSmsRequest.getMessage()).createdAt(new java.sql.Timestamp(System.currentTimeMillis())).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).build();
+    public ResponseEntity<Object> sendSms(SendSmsRequest sendSmsRequest) throws ResourceNotFoundException {
+        String generatedRequestId = new CommonUtilities().generateUniqueRequestId();
+        SmsRequest smsRequest = SmsRequest.builder().phoneNumber(sendSmsRequest.getPhoneNumber()).message(sendSmsRequest.getMessage()).createdAt(new java.sql.Timestamp(System.currentTimeMillis())).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(generatedRequestId).build();
         notificationRepository.save(smsRequest);
-        List<SmsRequest> listOfSmsRequest = notificationRepository.findAll().stream().filter(sms -> Objects.equals(sms.getPhoneNumber(), sendSmsRequest.getPhoneNumber()) && (Objects.equals(sms.getMessage(), smsRequest.getMessage()))).collect(Collectors.toList());
+        List<SmsRequest> listOfSmsRequest = notificationRepository.findAll().stream().filter(sms -> Objects.equals(sms.getRequestId(), generatedRequestId)).collect(Collectors.toList());
         if(!listOfSmsRequest.isEmpty())
         {
-            sendToKafka(listOfSmsRequest.get(0).getId());
-            SendSmsDataDto sendSmsDataDto = SendSmsDataDto.builder().requestId(listOfSmsRequest.get(0).getId()).comments("Successfully sent").build();
+            sendToKafka(listOfSmsRequest.get(0).getRequestId());
+            SendSmsDataDto sendSmsDataDto = SendSmsDataDto.builder().requestId(listOfSmsRequest.get(0).getRequestId()).comments("Request received").build();
             SendSmsResponseDto sendSmsResponseDto = SendSmsResponseDto.builder().sendSmsDataDto(sendSmsDataDto).build();
             return new ResponseEntity<>(sendSmsResponseDto, HttpStatus.CREATED);
         }
-        NotificationErrorDto notificationErrorDto = NotificationErrorDto.builder().code("Invalid Request").message("Something is wrong").build();
-        NotificationErrorResponseDto notificationErrorResponseDto = NotificationErrorResponseDto.builder().notificationErrorDto(notificationErrorDto).build();
-        return new ResponseEntity<>(notificationErrorResponseDto, HttpStatus.BAD_REQUEST);
+        throw new ResourceNotFoundException("Resource not found");
     }
-    void sendToKafka(Integer requestId)
+    void sendToKafka(String requestId)
     {
-        Optional<SmsRequest> request = notificationRepository.findById(requestId);
+        Optional<SmsRequest> request = notificationRepository.findAll().stream().filter(smsRequest -> Objects.equals(smsRequest.getRequestId(), requestId)).findFirst();
         if(request.isPresent())
         {
-            SmsRequest smsRequest;
             Long phoneNumber = request.get().getPhoneNumber();
             if(phoneNumber == null)
             {
-                smsRequest = SmsRequest.builder().id(requestId).failureCode("Invalid Request").failureComments("Number does not exist").status("failure").createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).build();
+                SmsRequest smsRequest = SmsRequest.builder().id(request.get().getId()).failureCode("500").failureComments("Number does not exist").status("failure").createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(requestId).build();
                 notificationRepository.save(smsRequest);
             }
             else {
                 List<BlackList> listOfBlackList = blackListRepository.findAll().stream().filter(blackList -> blackList.getPhoneNumber().equals(phoneNumber)).collect(Collectors.toList());
                 if (!listOfBlackList.isEmpty() && listOfBlackList.get(0).getStatusBlackList()) {
-                    smsRequest = SmsRequest.builder().id(requestId).failureCode("Invalid Request").failureComments("Number is blacklisted").status("failure").phoneNumber(phoneNumber).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).build();
+                    SmsRequest smsRequest = SmsRequest.builder().id(request.get().getId()).failureCode("501").failureComments("Number is blacklisted").status("failure").phoneNumber(phoneNumber).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(requestId).build();
+                    notificationRepository.save(smsRequest);
                 } else {
                     //send data to external api
-                    sendDatToExternalApi(GetSmsDetailsDto.builder().id(request.get().getId()).phoneNumber(request.get().getPhoneNumber()).message(request.get().getMessage()).build());
-                    smsRequest = SmsRequest.builder().id(requestId).status("success").phoneNumber(phoneNumber).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).build();
+                    sendDataToExternalApi(GetSmsDetailsDto.builder().id(request.get().getId()).phoneNumber(request.get().getPhoneNumber()).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).requestId(request.get().getRequestId()).build());
                 }
-                notificationRepository.save(smsRequest);
             }
         }
         else
         {
-            SmsRequest smsRequest = SmsRequest.builder().id(requestId).failureCode("Invalid Request").failureComments("No such request id present").status("failure").createdAt(new java.sql.Timestamp(System.currentTimeMillis())).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).build();
+            SmsRequest smsRequest = SmsRequest.builder().requestId(requestId).failureCode("500").failureComments("No such request id present").status("failure").createdAt(new java.sql.Timestamp(System.currentTimeMillis())).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).build();
             notificationRepository.save(smsRequest);
         }
     }
 
-    public ResponseEntity<Object> getSmsDetails(Integer requestId) {
-        Optional<SmsRequest> request = notificationRepository.findById(requestId);
+    public ResponseEntity<Object> getSmsDetails(String requestId) throws ResourceNotFoundException {
+        Optional<SmsRequest> request = notificationRepository.findAll().stream().filter(smsRequest -> Objects.equals(smsRequest.getRequestId(), requestId)).findFirst();
         if(request.isPresent())
         {
-            GetSmsDetailsDto getSmsDetailsDto = GetSmsDetailsDto.builder().phoneNumber(request.get().getPhoneNumber()).id(requestId).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(request.get().getUpdatedAt()).status(request.get().getStatus()).failureCode(request.get().getFailureCode()).failureComments(request.get().getFailureComments()).build();
+            GetSmsDetailsDto getSmsDetailsDto = GetSmsDetailsDto.builder().phoneNumber(request.get().getPhoneNumber()).id(request.get().getId()).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(request.get().getUpdatedAt()).status(request.get().getStatus()).failureCode(request.get().getFailureCode()).failureComments(request.get().getFailureComments()).requestId(requestId).build();
             GetSmsDetailsResponseDto getSmsDetailsResponseDto = GetSmsDetailsResponseDto.builder().getSmsDetailsDto(getSmsDetailsDto).build();
             return new ResponseEntity<>(getSmsDetailsResponseDto,HttpStatus.OK);
         }
-        NotificationErrorDto notificationErrorDto = NotificationErrorDto.builder().code("Invalid Request").message("No such request id exist").build();
-        NotificationErrorResponseDto notificationErrorResponseDto = NotificationErrorResponseDto.builder().notificationErrorDto(notificationErrorDto).build();
-        return new ResponseEntity<>(notificationErrorResponseDto, HttpStatus.BAD_REQUEST);
+        throw new ResourceNotFoundException("Entity not found");
     }
-    public void sendDatToExternalApi(GetSmsDetailsDto getSmsDetailsDto)
+    public void sendDataToExternalApi(GetSmsDetailsDto getSmsDetailsDto)
     {
-       RestTemplate restTemplate = new RestTemplate();
-       HttpHeaders headers = new HttpHeaders();
-       headers.add("key","93ceffda-5941-11ea-9da9-025282c394f2");
-       headers.setContentType(MediaType.APPLICATION_JSON);
-       List<DestinationDto> listOfDestinationDto = new ArrayList<>();
-       List<Long> msisdn = new ArrayList<>();
-       msisdn.add(getSmsDetailsDto.getPhoneNumber());
-       listOfDestinationDto.add(DestinationDto.builder().msisdn(msisdn).id(getSmsDetailsDto.getId()).build());
-       MessageRequestDto messageRequestDto = MessageRequestDto.builder().deliveryChannel("sms").channelDto(ChannelDto.builder().sms(Sms.builder().text(getSmsDetailsDto.getMessage()).build()).build()).destinationDtoList(listOfDestinationDto).build();
-       List<MessageRequestDto> listOfMessageRequestDto = new ArrayList<>();
-       listOfMessageRequestDto.add(messageRequestDto);
-        HttpEntity<List<MessageRequestDto>> request =
-                new HttpEntity<>(listOfMessageRequestDto, headers);
-        log.info("request is "+request);
-        try {
-            ResponseEntity<String> responseEntityStr = restTemplate.
-                    postForEntity("https://api.imiconnect.in/resources/v1/messaging", request, String.class);
-            log.info("response of external api is  " + responseEntityStr);
-        }
-        catch (Exception e)
-        {
-            log.error(e.getMessage());
+        ExternalService externalService = new ExternalService();
+        ResponseEntity<ExternalApiResponseDto> response =  externalService.sendSms(getSmsDetailsDto);
+        if(response!=null && response.hasBody()) {
+            if (Objects.equals(Objects.requireNonNull(response.getBody()).getListOfExternalApiResponse().get(0).getCode(), "1001")) {
+                SmsRequest smsRequest = SmsRequest.builder().id(getSmsDetailsDto.getId()).status("success").phoneNumber(getSmsDetailsDto.getPhoneNumber()).message(getSmsDetailsDto.getMessage()).createdAt(getSmsDetailsDto.getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(getSmsDetailsDto.getRequestId()).build();
+                notificationRepository.save(smsRequest);
+            } else {
+                if(!response.getBody().getListOfExternalApiResponse().isEmpty()) {
+                    ExternalApiResponse externalApiResponse = response.getBody().getListOfExternalApiResponse().get(0);
+                    SmsRequest smsRequest = SmsRequest.builder().id(getSmsDetailsDto.getId()).failureCode(externalApiResponse.getCode()).failureComments(externalApiResponse.getDescription()).status("failure").phoneNumber(getSmsDetailsDto.getPhoneNumber()).message(getSmsDetailsDto.getMessage()).createdAt(getSmsDetailsDto.getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(getSmsDetailsDto.getRequestId()).build();
+                    notificationRepository.save(smsRequest);
+                }
+            }
         }
     }
 }

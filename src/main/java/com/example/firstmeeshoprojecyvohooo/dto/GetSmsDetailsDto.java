@@ -28,5 +28,8 @@ public class GetSmsDetailsDto{
     String failureCode;
     @JsonProperty(value = "failure_comments")
     String failureComments;
+    @JsonProperty(value = "request_id")
+    String requestId;
+
 
 }
