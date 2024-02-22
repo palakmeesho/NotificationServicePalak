@@ -1,11 +1,13 @@
 package com.example.firstmeeshoprojecyvohooo.service;
 
 import com.example.firstmeeshoprojecyvohooo.dao.BlackListRepository;
+import com.example.firstmeeshoprojecyvohooo.dao.RedisRepository;
 import com.example.firstmeeshoprojecyvohooo.dto.BlackListResponseDto;
 import com.example.firstmeeshoprojecyvohooo.dto.ErrorResponseDto;
 import com.example.firstmeeshoprojecyvohooo.dto.GetBlackListResponseDto;
 import com.example.firstmeeshoprojecyvohooo.model.BlackList;
 import com.example.firstmeeshoprojecyvohooo.dto.BlackListRequestDto;
+import com.example.firstmeeshoprojecyvohooo.model.RedisBlacklist;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -23,6 +25,8 @@ import java.util.stream.Collectors;
 public class BlackListService {
     @Autowired
     BlackListRepository blackListRepository;
+    @Autowired
+    RedisRepository redisRepository;
 
     public ResponseEntity<Object> blacklistPhoneNumbers(BlackListRequestDto requestDto) {
         try{
@@ -58,8 +62,19 @@ public class BlackListService {
     //save phone numbers to redis
     public void blacklistPhoneNumbersInRedis(BlackListRequestDto requestDto)
     {
-        //save to redis
-        log.info("Data saved successfully to redis");
+        for(Long phoneNum: requestDto.getPhoneNumbers()) {
+            RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNum);
+            if(redisBlacklist == null)
+            {
+                redisRepository.save(RedisBlacklist.builder().status(true).phoneNumber(phoneNum).build());
+            }
+            else
+            {
+                redisRepository.save(RedisBlacklist.builder().phoneNumber(phoneNum).status(true).build());
+            }
+            log.info("redis blacklist "+redisBlacklist);
+        }
+        log.info("Data saved successfully to redis"+redisRepository.findAll());
     }
 
     public ResponseEntity<Object> whitelistPhoneNumbers(BlackListRequestDto requestDto) {
@@ -105,7 +120,15 @@ public class BlackListService {
     public void whitelistPhoneNumbersInRedis(BlackListRequestDto requestDto)
     {
         //save to redis
-        log.info("Data deleted successfully from redis");
+        for(Long phoneNum: requestDto.getPhoneNumbers()) {
+            RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNum);
+            if(redisBlacklist != null)
+            {
+                redisRepository.save(RedisBlacklist.builder().status(false).phoneNumber(phoneNum).build());
+            }
+            log.info("redis blacklist "+redisBlacklist);
+        }
+        log.info("Data deleted whitelisted successfully from redis");
     }
     //get phone numbers from database
     public ResponseEntity<Object> getBlackListedPhoneNumbers() {

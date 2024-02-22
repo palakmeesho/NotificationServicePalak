@@ -1,20 +1,22 @@
 package com.example.firstmeeshoprojecyvohooo.service;
 
-import com.example.firstmeeshoprojecyvohooo.dao.BlackListRepository;
 import com.example.firstmeeshoprojecyvohooo.dao.NotificationRepository;
+import com.example.firstmeeshoprojecyvohooo.dao.RedisRepository;
 import com.example.firstmeeshoprojecyvohooo.dto.*;
 import com.example.firstmeeshoprojecyvohooo.exception.ResourceNotFoundException;
-import com.example.firstmeeshoprojecyvohooo.model.BlackList;
+import com.example.firstmeeshoprojecyvohooo.model.RedisBlacklist;
 import com.example.firstmeeshoprojecyvohooo.model.SmsRequest;
 import com.example.firstmeeshoprojecyvohooo.util.CommonUtilities;
 import com.example.firstmeeshoprojecyvohooo.util.ExternalService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,7 +26,7 @@ public class NotificationService {
     private NotificationRepository notificationRepository;
 
     @Autowired
-    private BlackListRepository blackListRepository;
+    private RedisRepository redisRepository;
 
     public ResponseEntity<Object> sendSms(SendSmsRequest sendSmsRequest) throws ResourceNotFoundException {
         String generatedRequestId = new CommonUtilities().generateUniqueRequestId();
@@ -52,8 +54,9 @@ public class NotificationService {
                 notificationRepository.save(smsRequest);
             }
             else {
-                List<BlackList> listOfBlackList = blackListRepository.findAll().stream().filter(blackList -> blackList.getPhoneNumber().equals(phoneNumber)).collect(Collectors.toList());
-                if (!listOfBlackList.isEmpty() && listOfBlackList.get(0).getStatusBlackList()) {
+                //check phone number is blacklisted or not
+                RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNumber);
+                if (redisBlacklist!=null && redisBlacklist.getStatus()) {
                     SmsRequest smsRequest = SmsRequest.builder().id(request.get().getId()).failureCode("501").failureComments("Number is blacklisted").status("failure").phoneNumber(phoneNumber).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(requestId).build();
                     notificationRepository.save(smsRequest);
                 } else {
