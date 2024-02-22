@@ -13,9 +13,8 @@ public class RedisConfig {
     @Bean
     public JedisConnectionFactory connectionFactory()
     {
-        JedisConnectionFactory jedisConnectionFactory = new JedisConnectionFactory();
-        jedisConnectionFactory.getConnection().flushDb();
-        return jedisConnectionFactory;
+        //jedisConnectionFactory.getConnection().flushDb();
+        return new JedisConnectionFactory();
     }
     @Bean
     public RedisTemplate redisTemplate()
