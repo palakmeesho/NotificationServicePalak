@@ -3,7 +3,6 @@ package com.example.firstmeeshoprojecyvohooo.service;
 import com.example.firstmeeshoprojecyvohooo.dao.NotificationRepository;
 import com.example.firstmeeshoprojecyvohooo.dao.RedisRepository;
 import com.example.firstmeeshoprojecyvohooo.dto.*;
-import com.example.firstmeeshoprojecyvohooo.exception.ResourceNotFoundException;
 import com.example.firstmeeshoprojecyvohooo.model.RedisBlacklist;
 import com.example.firstmeeshoprojecyvohooo.model.SmsRequest;
 import com.example.firstmeeshoprojecyvohooo.util.CommonUtilities;
@@ -28,7 +27,7 @@ public class NotificationService {
     @Autowired
     private RedisRepository redisRepository;
 
-    public ResponseEntity<SendSmsResponseDto> sendSms(SendSmsRequest sendSmsRequest) throws ResourceNotFoundException {
+    public ResponseEntity<SendSmsResponseDto> sendSms(SendSmsRequest sendSmsRequest)  {
         String generatedRequestId = new CommonUtilities().generateUniqueRequestId();
         SmsRequest smsRequest = SmsRequest.builder().phoneNumber(sendSmsRequest.getPhoneNumber()).message(sendSmsRequest.getMessage()).createdAt(new java.sql.Timestamp(System.currentTimeMillis())).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(generatedRequestId).build();
         notificationRepository.save(smsRequest);
@@ -40,7 +39,11 @@ public class NotificationService {
             SendSmsResponseDto sendSmsResponseDto = SendSmsResponseDto.builder().sendSmsDataDto(sendSmsDataDto).build();
             return new ResponseEntity<>(sendSmsResponseDto, HttpStatus.CREATED);
         }
-        throw new ResourceNotFoundException("Resource not found");
+        else
+        {
+            SendSmsResponseDto sendSmsResponseDto = SendSmsResponseDto.builder().error("Resource Not Found").build();
+            return new ResponseEntity<>(sendSmsResponseDto, HttpStatus.BAD_REQUEST);
+        }
     }
     void sendToKafka(String requestId)
     {
@@ -72,7 +75,7 @@ public class NotificationService {
         }
     }
 
-    public ResponseEntity<GetSmsDetailsResponseDto> getSmsDetails(String requestId) throws ResourceNotFoundException {
+    public ResponseEntity<GetSmsDetailsResponseDto> getSmsDetails(String requestId)  {
         Optional<SmsRequest> request = notificationRepository.findAll().stream().filter(smsRequest -> Objects.equals(smsRequest.getRequestId(), requestId)).findFirst();
         if(request.isPresent())
         {
@@ -80,7 +83,8 @@ public class NotificationService {
             GetSmsDetailsResponseDto getSmsDetailsResponseDto = GetSmsDetailsResponseDto.builder().getSmsDetailsDto(getSmsDetailsDto).build();
             return new ResponseEntity<>(getSmsDetailsResponseDto,HttpStatus.OK);
         }
-        throw new ResourceNotFoundException("Entity not found");
+        GetSmsDetailsResponseDto getSmsDetailsResponseDto = GetSmsDetailsResponseDto.builder().error("Resource not found").build();
+        return new ResponseEntity<>(getSmsDetailsResponseDto,HttpStatus.BAD_REQUEST);
     }
     public void sendDataToExternalApi(GetSmsDetailsDto getSmsDetailsDto)
     {

@@ -13,4 +13,6 @@ import lombok.NoArgsConstructor;
 public class SendSmsResponseDto {
     @JsonProperty(value = "data")
     SendSmsDataDto sendSmsDataDto;
+    @JsonProperty(value = "error")
+    String error;
 }

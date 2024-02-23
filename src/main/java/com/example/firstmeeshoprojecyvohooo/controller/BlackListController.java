@@ -7,26 +7,22 @@ import com.example.firstmeeshoprojecyvohooo.dto.GetBlackListResponseDto;
 import com.example.firstmeeshoprojecyvohooo.service.BlackListService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
-import javax.validation.Valid;
 
 @RestController
 @RequestMapping("/v1/blacklist")
-@Validated
 public class BlackListController {
 
     @Autowired
     BlackListService blackListService;
 
     @PostMapping
-    public ResponseEntity<BlackListResponseDto> blacklistPhoneNumbers(@Valid @RequestBody BlackListRequestDto requestDto)
+    public ResponseEntity<BlackListResponseDto> blacklistPhoneNumbers (@RequestBody BlackListRequestDto requestDto)
     {
         return blackListService.blacklistPhoneNumbers(requestDto);
     }
     @PutMapping
-    public ResponseEntity<BlackListResponseDto> whitelistPhoneNumbers(@Valid @RequestBody BlackListRequestDto requestDto)
+    public ResponseEntity<BlackListResponseDto> whitelistPhoneNumbers(@RequestBody BlackListRequestDto requestDto)
     {
         return blackListService.whitelistPhoneNumbers(requestDto);
     }

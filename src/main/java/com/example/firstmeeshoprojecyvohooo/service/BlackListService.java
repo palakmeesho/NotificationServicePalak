@@ -30,6 +30,11 @@ public class BlackListService {
     public ResponseEntity<BlackListResponseDto> blacklistPhoneNumbers(BlackListRequestDto requestDto) {
        List<Long> alreadyExisting = new ArrayList<>();
        List<Long> wrongNumbers = new ArrayList<>();
+       if(requestDto== null || requestDto.getPhoneNumbers()==null || requestDto.getPhoneNumbers().isEmpty())
+       {
+           BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().error("Invalid request").build();
+           return new ResponseEntity<>(blackListResponseDto, HttpStatus.BAD_REQUEST);
+       }
         try{
             for(Long phoneNum: requestDto.getPhoneNumbers()) {
                 if(phoneNum.toString().length() == 10) {
@@ -91,6 +96,11 @@ public class BlackListService {
     }
 
     public ResponseEntity<BlackListResponseDto> whitelistPhoneNumbers(BlackListRequestDto requestDto) {
+        if(requestDto== null || requestDto.getPhoneNumbers()==null || requestDto.getPhoneNumbers().isEmpty())
+        {
+            BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().error("Invalid request").build();
+            return new ResponseEntity<>(blackListResponseDto, HttpStatus.BAD_REQUEST);
+        }
         List<Long> notExistingNumber = new ArrayList<>();
         try {
             for(Long phoneNum: requestDto.getPhoneNumbers()) {
