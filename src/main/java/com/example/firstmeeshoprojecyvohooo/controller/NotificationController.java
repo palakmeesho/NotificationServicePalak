@@ -1,6 +1,8 @@
 package com.example.firstmeeshoprojecyvohooo.controller;
 
+import com.example.firstmeeshoprojecyvohooo.dto.GetSmsDetailsResponseDto;
 import com.example.firstmeeshoprojecyvohooo.dto.SendSmsRequest;
+import com.example.firstmeeshoprojecyvohooo.dto.SendSmsResponseDto;
 import com.example.firstmeeshoprojecyvohooo.exception.ResourceNotFoundException;
 import com.example.firstmeeshoprojecyvohooo.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +20,12 @@ public class NotificationController {
     private NotificationService notificationService;
 
     @PostMapping("/v1/sms/send")
-    public ResponseEntity<Object> sendSms(@Valid @RequestBody SendSmsRequest sendSmsRequest) throws ResourceNotFoundException
+    public ResponseEntity<SendSmsResponseDto> sendSms(@Valid @RequestBody SendSmsRequest sendSmsRequest) throws ResourceNotFoundException
     {
        return notificationService.sendSms(sendSmsRequest);
     }
     @GetMapping("/v1/sms/{requestId}")
-    public ResponseEntity<Object> getSmsDetails(@Valid @NotEmpty(message = "Cannot be empty") @PathVariable String requestId) throws ResourceNotFoundException
+    public ResponseEntity<GetSmsDetailsResponseDto> getSmsDetails(@Valid @NotEmpty(message = "Cannot be empty") @PathVariable String requestId) throws ResourceNotFoundException
     {
         return notificationService.getSmsDetails(requestId);
     }

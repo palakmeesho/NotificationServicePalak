@@ -28,7 +28,7 @@ public class NotificationService {
     @Autowired
     private RedisRepository redisRepository;
 
-    public ResponseEntity<Object> sendSms(SendSmsRequest sendSmsRequest) throws ResourceNotFoundException {
+    public ResponseEntity<SendSmsResponseDto> sendSms(SendSmsRequest sendSmsRequest) throws ResourceNotFoundException {
         String generatedRequestId = new CommonUtilities().generateUniqueRequestId();
         SmsRequest smsRequest = SmsRequest.builder().phoneNumber(sendSmsRequest.getPhoneNumber()).message(sendSmsRequest.getMessage()).createdAt(new java.sql.Timestamp(System.currentTimeMillis())).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(generatedRequestId).build();
         notificationRepository.save(smsRequest);
@@ -57,7 +57,7 @@ public class NotificationService {
                 //check phone number is blacklisted or not
                 RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNumber);
                 if (redisBlacklist!=null && redisBlacklist.getStatus()) {
-                    SmsRequest smsRequest = SmsRequest.builder().id(request.get().getId()).failureCode("501").failureComments("Number is blacklisted").status("failure").phoneNumber(phoneNumber).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(requestId).build();
+                    SmsRequest smsRequest = SmsRequest.builder().id(request.get().getId()).failureCode("").failureComments("Number is blacklisted").status("failure").phoneNumber(phoneNumber).message(request.get().getMessage()).createdAt(request.get().getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(requestId).build();
                     notificationRepository.save(smsRequest);
                 } else {
                     //send data to external api
@@ -72,7 +72,7 @@ public class NotificationService {
         }
     }
 
-    public ResponseEntity<Object> getSmsDetails(String requestId) throws ResourceNotFoundException {
+    public ResponseEntity<GetSmsDetailsResponseDto> getSmsDetails(String requestId) throws ResourceNotFoundException {
         Optional<SmsRequest> request = notificationRepository.findAll().stream().filter(smsRequest -> Objects.equals(smsRequest.getRequestId(), requestId)).findFirst();
         if(request.isPresent())
         {
@@ -97,6 +97,11 @@ public class NotificationService {
                     notificationRepository.save(smsRequest);
                 }
             }
+        }
+        else
+        {
+            SmsRequest smsRequest = SmsRequest.builder().id(getSmsDetailsDto.getId()).failureCode("500").failureComments("Recieved null response").status("failure").phoneNumber(getSmsDetailsDto.getPhoneNumber()).message(getSmsDetailsDto.getMessage()).createdAt(getSmsDetailsDto.getCreatedAt()).updatedAt(new java.sql.Timestamp(System.currentTimeMillis())).requestId(getSmsDetailsDto.getRequestId()).build();
+            notificationRepository.save(smsRequest);
         }
     }
 }

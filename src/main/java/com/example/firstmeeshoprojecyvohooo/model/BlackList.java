@@ -1,10 +1,8 @@
 package com.example.firstmeeshoprojecyvohooo.model;
 
 import lombok.*;
-import org.springframework.data.redis.core.RedisHash;
 
 import javax.persistence.*;
-import java.io.Serializable;
 
 @Data
 @Entity

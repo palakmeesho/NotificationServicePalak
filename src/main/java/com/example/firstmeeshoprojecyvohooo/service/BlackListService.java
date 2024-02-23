@@ -2,11 +2,10 @@ package com.example.firstmeeshoprojecyvohooo.service;
 
 import com.example.firstmeeshoprojecyvohooo.dao.BlackListRepository;
 import com.example.firstmeeshoprojecyvohooo.dao.RedisRepository;
+import com.example.firstmeeshoprojecyvohooo.dto.BlackListRequestDto;
 import com.example.firstmeeshoprojecyvohooo.dto.BlackListResponseDto;
-import com.example.firstmeeshoprojecyvohooo.dto.ErrorResponseDto;
 import com.example.firstmeeshoprojecyvohooo.dto.GetBlackListResponseDto;
 import com.example.firstmeeshoprojecyvohooo.model.BlackList;
-import com.example.firstmeeshoprojecyvohooo.dto.BlackListRequestDto;
 import com.example.firstmeeshoprojecyvohooo.model.RedisBlacklist;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,114 +27,117 @@ public class BlackListService {
     @Autowired
     RedisRepository redisRepository;
 
-    public ResponseEntity<Object> blacklistPhoneNumbers(BlackListRequestDto requestDto) {
+    public ResponseEntity<BlackListResponseDto> blacklistPhoneNumbers(BlackListRequestDto requestDto) {
+       List<Long> alreadyExisting = new ArrayList<>();
+       List<Long> wrongNumbers = new ArrayList<>();
         try{
-            blacklistPhoneNumbersInDb(requestDto);
-            blacklistPhoneNumbersInRedis(requestDto);
+            for(Long phoneNum: requestDto.getPhoneNumbers()) {
+                if(phoneNum.toString().length() == 10) {
+                    RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNum);
+                    if (redisBlacklist == null) {
+                        blacklistPhoneNumbersInDb(phoneNum, "add");
+                        blacklistPhoneNumbersInRedis(phoneNum);
+                    } else if (!redisBlacklist.getStatus()) {
+                        blacklistPhoneNumbersInDb(phoneNum, "update");
+                        blacklistPhoneNumbersInRedis(phoneNum);
+                    } else {
+                        alreadyExisting.add(redisBlacklist.getPhoneNumber());
+                    }
+                }
+                else
+                {
+                    wrongNumbers.add(phoneNum);
+                }
+            }
         }
         catch (Exception e)
         {
             log.error("Exception is"+ e.getMessage()+" "+ Arrays.toString(e.getStackTrace()));
-            ErrorResponseDto errorResponseDto = ErrorResponseDto.builder().message("Failed Blacklisting").build();
-            return new ResponseEntity<>(errorResponseDto, HttpStatus.BAD_REQUEST);
+            BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().error("Failed Blacklisting").build();
+            return new ResponseEntity<>(blackListResponseDto, HttpStatus.BAD_REQUEST);
         }
-        BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().data("Successfully blacklisted").build();
+        String message = "Successfully blacklisted";
+        if(!wrongNumbers.isEmpty())
+        {
+            message = message + wrongNumbers+" Invalid phone numbers ";
+        }
+        if(!alreadyExisting.isEmpty())
+        {
+            message = message + alreadyExisting+" Already existed";
+        }
+        BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().data(message).build();
         return new ResponseEntity<>(blackListResponseDto, HttpStatus.CREATED);
     }
     //save phone numbers to db
-    public void blacklistPhoneNumbersInDb(BlackListRequestDto requestDto)
+    public void blacklistPhoneNumbersInDb(Long phoneNumber,String task)
     {
-        for(Long phoneNum: requestDto.getPhoneNumbers()) {
-            List<BlackList> entries = blackListRepository.findAll().stream().filter(blackList1 -> blackList1.getPhoneNumber().equals(phoneNum)).collect(Collectors.toList());
             BlackList blackList;
-            if (entries.isEmpty()) {
-                blackList = BlackList.builder().phoneNumber(phoneNum).statusBlackList(true).build();
+            if (Objects.equals(task, "add")) {
+                blackList = BlackList.builder().phoneNumber(phoneNumber).statusBlackList(true).build();
             }
             else
             {
+                List<BlackList> entries = blackListRepository.findAll().stream().filter(blackList1 -> blackList1.getPhoneNumber().equals(phoneNumber)).collect(Collectors.toList());
                 blackList = BlackList.builder().id(entries.get(0).getId()).statusBlackList(true).phoneNumber(entries.get(0).getPhoneNumber()).build();
             }
             blackListRepository.save(blackList);
-        }
-        log.info("Data saved successfully to database");
+            log.info("Data saved successfully to database"+phoneNumber);
     }
     //save phone numbers to redis
-    public void blacklistPhoneNumbersInRedis(BlackListRequestDto requestDto)
+    public void blacklistPhoneNumbersInRedis(Long phoneNumber)
     {
-        for(Long phoneNum: requestDto.getPhoneNumbers()) {
-            RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNum);
-            if(redisBlacklist == null)
-            {
-                redisRepository.save(RedisBlacklist.builder().status(true).phoneNumber(phoneNum).build());
-            }
-            else
-            {
-                redisRepository.save(RedisBlacklist.builder().phoneNumber(phoneNum).status(true).build());
-            }
-            log.info("redis blacklist "+redisBlacklist);
-        }
-        log.info("Data saved successfully to redis"+redisRepository.findAll());
+            redisRepository.save(RedisBlacklist.builder().phoneNumber(phoneNumber).status(true).build());
+            log.info("Data saved successfully to redis"+phoneNumber);
     }
 
-    public ResponseEntity<Object> whitelistPhoneNumbers(BlackListRequestDto requestDto) {
+    public ResponseEntity<BlackListResponseDto> whitelistPhoneNumbers(BlackListRequestDto requestDto) {
+        List<Long> notExistingNumber = new ArrayList<>();
         try {
-            Object object = whitelistPhoneNumbersInDb(requestDto);
-            if (object != null) {
-                return new ResponseEntity<>(object, HttpStatus.CREATED);
+            for(Long phoneNum: requestDto.getPhoneNumbers()) {
+                RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNum);
+                if (redisBlacklist == null) {
+                   notExistingNumber.add(phoneNum);
+                } else if (!redisBlacklist.getStatus()) {
+                   whitelistPhoneNumbersInDb(phoneNum);
+                   whitelistPhoneNumbersInRedis(phoneNum);
+                }
             }
-            whitelistPhoneNumbersInRedis(requestDto);
         }
         catch (Exception e)
         {
             log.error("Exception is"+ e.getMessage()+" "+ Arrays.toString(e.getStackTrace()));
-            ErrorResponseDto errorResponseDto = ErrorResponseDto.builder().message("Failed whitelisting").build();
-            return new ResponseEntity<>(errorResponseDto, HttpStatus.BAD_REQUEST);
+            BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().error("Failed whitelisting").build();
+            return new ResponseEntity<>(blackListResponseDto, HttpStatus.BAD_REQUEST);
+        }
+        if(!notExistingNumber.isEmpty())
+        {
+            BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().data(notExistingNumber+"not presnt").build();
+            return new ResponseEntity<>(blackListResponseDto, HttpStatus.CREATED);
         }
         BlackListResponseDto blackListResponseDto = BlackListResponseDto.builder().data("Successfully whitelisted").build();
         return new ResponseEntity<>(blackListResponseDto, HttpStatus.CREATED);
     }
     //delete phone numbers from db
-    public Object whitelistPhoneNumbersInDb(BlackListRequestDto requestDto)
+    public void whitelistPhoneNumbersInDb(Long phoneNumber)
     {
-        List<Long> phoneNumberNotPresent = new ArrayList<>();
-        for(Long phoneNum: requestDto.getPhoneNumbers()) {
-            List<BlackList> listOfBlackList = blackListRepository.findAll().stream().filter(blackList -> Objects.equals(blackList.getPhoneNumber(), phoneNum)).collect(Collectors.toList());
-            if (listOfBlackList.isEmpty()) {
-                phoneNumberNotPresent.add(phoneNum);
-            }
-            else
-            {
-                BlackList blackList = BlackList.builder().id(listOfBlackList.get(0).getId()).phoneNumber(listOfBlackList.get(0).getPhoneNumber()).statusBlackList(false).build();
-                blackListRepository.save(blackList);
-            }
-        }
-        if(!phoneNumberNotPresent.isEmpty())
-        {
-            return ErrorResponseDto.builder().message(phoneNumberNotPresent+" not present").build();
-        }
-        log.info("Data deleted successfully to database");
-        return null;
+        List<BlackList> listOfBlackList = blackListRepository.findAll().stream().filter(blackList -> Objects.equals(blackList.getPhoneNumber(), phoneNumber)).collect(Collectors.toList());
+        BlackList blackList = BlackList.builder().id(listOfBlackList.get(0).getId()).phoneNumber(listOfBlackList.get(0).getPhoneNumber()).statusBlackList(false).build();
+        blackListRepository.save(blackList);
+        log.info("Data  successfully whitelisted to database"+phoneNumber);
     }
     //delete phone numbers from redis
-    public void whitelistPhoneNumbersInRedis(BlackListRequestDto requestDto)
+    public void whitelistPhoneNumbersInRedis(Long phoneNumber)
     {
         //save to redis
-        for(Long phoneNum: requestDto.getPhoneNumbers()) {
-            RedisBlacklist redisBlacklist = redisRepository.findByPhoneNumber(phoneNum);
-            if(redisBlacklist != null)
-            {
-                redisRepository.save(RedisBlacklist.builder().status(false).phoneNumber(phoneNum).build());
-            }
-            log.info("redis blacklist "+redisBlacklist);
-        }
-        log.info("Data deleted whitelisted successfully from redis");
+        redisRepository.save(RedisBlacklist.builder().status(false).phoneNumber(phoneNumber).build());
+        log.info("Data  successfully whitelisted to redis"+phoneNumber);
     }
     //get phone numbers from database
-    public ResponseEntity<Object> getBlackListedPhoneNumbers() {
+    public ResponseEntity<GetBlackListResponseDto> getBlackListedPhoneNumbers() {
         try {
-            List<BlackList> listOfBlackList = blackListRepository.findAll();
+            List<RedisBlacklist> listOfBlackList = redisRepository.findAll();
             GetBlackListResponseDto getBlackListResponseDto = GetBlackListResponseDto.builder().data(
-                    listOfBlackList.stream().map(BlackList::getPhoneNumber).collect(Collectors.toList())
+                    listOfBlackList.stream().map(RedisBlacklist::getPhoneNumber).collect(Collectors.toList())
             ).build();
             log.info("Data successfully returned");
             return new ResponseEntity<>(getBlackListResponseDto, HttpStatus.OK);
@@ -143,8 +145,8 @@ public class BlackListService {
         catch(Exception e)
         {
             log.error("Exception is"+ e.getMessage()+" "+ Arrays.toString(e.getStackTrace()));
-            ErrorResponseDto errorResponseDto = ErrorResponseDto.builder().message("Invalid Request").build();
-            return new ResponseEntity<>(errorResponseDto, HttpStatus.BAD_REQUEST);
+            GetBlackListResponseDto getBlackListResponseDto = GetBlackListResponseDto.builder().error("Invalid Request").build();
+            return new ResponseEntity<>(getBlackListResponseDto, HttpStatus.BAD_REQUEST);
         }
     }
 }

@@ -13,7 +13,8 @@ public class RedisConfig {
     @Bean
     public JedisConnectionFactory connectionFactory()
     {
-        //jedisConnectionFactory.getConnection().flushDb();
+//        JedisConnectionFactory jedisConnectionFactory = new JedisConnectionFactory();
+//        jedisConnectionFactory.getConnection().flushDb(); // to flush redis cache data
         return new JedisConnectionFactory();
     }
     @Bean

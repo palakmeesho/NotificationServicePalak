@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import javax.validation.constraints.NotEmpty;
 import java.util.List;
+import java.util.Set;
 
 @Data
 @AllArgsConstructor
@@ -16,5 +17,5 @@ import java.util.List;
 public class BlackListRequestDto {
     @NotEmpty(message = "one phone number should be present")
     @JsonProperty(value = "phoneNumbers")
-    List<Long> phoneNumbers;
+    Set<Long> phoneNumbers;
 }

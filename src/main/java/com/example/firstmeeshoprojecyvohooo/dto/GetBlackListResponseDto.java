@@ -15,4 +15,6 @@ import java.util.List;
 public class GetBlackListResponseDto {
     @JsonProperty(value = "data")
     List<Long> data;
+    @JsonProperty(value = "error")
+    String error;
 }

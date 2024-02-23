@@ -13,4 +13,6 @@ import lombok.NoArgsConstructor;
 public class BlackListResponseDto {
     @JsonProperty(value = "data")
     String data;
+    @JsonProperty(value = "error")
+    String error;
 }
